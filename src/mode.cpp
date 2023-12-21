@@ -753,6 +753,59 @@ bool ZepMode::GetCommand(CommandContext& context)
         return true;
     }
 
+    auto doIn = [&](CommandOperation operation, bool modeSwitch) {
+        if (!context.keymap.captureChars.empty())
+        {
+            auto range = buffer.FindMatchingPair(bufferCursor, context.keymap.captureChars[0]);
+            if (range.first.Valid() && range.second.Valid())
+            {
+                if ((range.first + 1) == range.second)
+                {
+                    // A closed pair (); so insert between them
+                    GetCurrentWindow()->SetBufferCursor(range.first + 1);
+                    if (modeSwitch)
+                        context.commandResult.modeSwitch = EditorMode::Insert;
+                    return true;
+                }
+                else
+                {
+                    GlyphIterator lineEnd = context.buffer.GetLinePos(range.first, LineLocation::LineCRBegin);
+                    if (lineEnd.Valid() && lineEnd < range.second)
+                    {
+                        GlyphIterator lineStart = context.buffer.GetLinePos(range.first, LineLocation::LineBegin);
+                        auto offsetStart = (range.first.Index() - lineStart.Index());
+
+                        // If change in a pair of delimeters that are on seperate lines, then
+                        // we remove everything and replace with 2 CRs and an indent based on the start bracket
+                        // Since Zep doesn't auto indent, this is the best we can do for now.
+                        context.replaceRangeMode = ReplaceRangeMode::Replace;
+                        context.op = operation;
+
+                        auto offsetText = std::string(offsetStart + 4, ' ');
+                        auto offsetBracket = std::string(offsetStart, ' ');
+                        context.tempReg.text = std::string("\n") + offsetText + "\n" + offsetBracket;
+                        context.pRegister = &context.tempReg;
+                        context.beginRange = range.first + 1;
+                        context.endRange = range.second;
+                        context.cursorAfterOverride = range.first + (long)offsetText.length() + 2;
+                        if (modeSwitch)
+                            context.commandResult.modeSwitch = EditorMode::Insert;
+                    }
+                    else
+                    {
+                        context.beginRange = range.first + 1; // returned range is inclusive
+                        context.endRange = range.second;
+                        context.op = operation;
+                        if (modeSwitch)
+                            context.commandResult.modeSwitch = EditorMode::Insert;
+                    }
+                }
+            }
+        }
+
+        return false;
+    };
+
     if (mappedCommand == id_NormalMode)
     {
         // TODO: I think this should be a 'command' which would get replayed with dot;
@@ -1617,6 +1670,13 @@ bool ZepMode::GetCommand(CommandContext& context)
             context.op = CommandOperation::Delete;
         }
     }
+    else if (mappedCommand == id_DeleteIn)
+    {
+        if (doIn(CommandOperation::Delete, false))
+        {
+            return true;
+        }
+    }
     else if (mappedCommand == id_ChangeToLineEnd)
     {
         if (GetOperationRange("$", context.currentMode, context.beginRange, context.endRange))
@@ -1692,50 +1752,9 @@ bool ZepMode::GetCommand(CommandContext& context)
     }
     else if (mappedCommand == id_ChangeIn)
     {
-        if (!context.keymap.captureChars.empty())
+        if (doIn(CommandOperation::Delete, true))
         {
-            auto range = buffer.FindMatchingPair(bufferCursor, context.keymap.captureChars[0]);
-            if (range.first.Valid() && range.second.Valid())
-            {
-                if ((range.first + 1) == range.second)
-                {
-                    // A closed pair (); so insert between them
-                    GetCurrentWindow()->SetBufferCursor(range.first + 1);
-                    context.commandResult.modeSwitch = EditorMode::Insert;
-                    return true;
-                }
-                else
-                {
-                    GlyphIterator lineEnd = context.buffer.GetLinePos(range.first, LineLocation::LineCRBegin);
-                    if (lineEnd.Valid() && lineEnd < range.second)
-                    {
-                        GlyphIterator lineStart = context.buffer.GetLinePos(range.first, LineLocation::LineBegin);
-                        auto offsetStart = (range.first.Index() - lineStart.Index());
-
-                        // If change in a pair of delimeters that are on seperate lines, then
-                        // we remove everything and replace with 2 CRs and an indent based on the start bracket
-                        // Since Zep doesn't auto indent, this is the best we can do for now.
-                        context.replaceRangeMode = ReplaceRangeMode::Replace;
-                        context.op = CommandOperation::Replace;
-
-                        auto offsetText = std::string(offsetStart + 4, ' ');
-                        auto offsetBracket = std::string(offsetStart, ' ');
-                        context.tempReg.text = std::string("\n") + offsetText + "\n" + offsetBracket;
-                        context.pRegister = &context.tempReg;
-                        context.beginRange = range.first + 1;
-                        context.endRange = range.second;
-                        context.cursorAfterOverride = range.first + (long)offsetText.length() + 2;
-                        context.commandResult.modeSwitch = EditorMode::Insert;
-                    }
-                    else
-                    {
-                        context.beginRange = range.first + 1; // returned range is inclusive
-                        context.endRange = range.second;
-                        context.op = CommandOperation::Delete;
-                        context.commandResult.modeSwitch = EditorMode::Insert;
-                    }
-                }
-            }
+            return true;
         }
     }
     else if (mappedCommand == id_SubstituteLine)

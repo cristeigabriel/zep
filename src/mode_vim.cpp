@@ -238,6 +238,7 @@ void ZepMode_Vim::SetupKeyMaps()
     AddKeyMapWithCountRegisters({ &m_normalMap }, { "daW" }, id_DeleteAWORD);
     AddKeyMapWithCountRegisters({ &m_normalMap }, { "diw" }, id_DeleteInnerWord);
     AddKeyMapWithCountRegisters({ &m_normalMap }, { "diW" }, id_DeleteInnerWORD);
+    AddKeyMapWithCountRegisters({ &m_normalMap }, { "di<.>" }, id_DeleteIn);
     AddKeyMapWithCountRegisters({ &m_normalMap }, { "D", "d$" }, id_DeleteToLineEnd);
     AddKeyMapWithCountRegisters({ &m_normalMap }, { "d<D>d", "dd" }, id_DeleteLine);
     AddKeyMapWithCountRegisters({ &m_normalMap }, { "dt<.>" }, id_DeleteToChar);
